@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Coin Merge 10 - Mouse Drag & Drop Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: radial-gradient(circle at 50% 30%, #30170a 0%, #150a04 100%);
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: default;
+    }
+
+    .wooden-board {
+      background: linear-gradient(145deg, #a4582c, #6c3212);
+      box-shadow: 
+        0 15px 35px rgba(0,0,0,0.7),
+        inset 0 2px 4px rgba(255,255,255,0.25),
+        inset 0 -6px 12px rgba(0,0,0,0.6);
+      border: 4px solid #4a210b;
+    }
+
+    .slot-groove {
+      background: linear-gradient(180deg, #240f04 0%, #381907 40%, #200d03 100%);
+      box-shadow: 
+        inset 0 4px 8px rgba(0,0,0,0.9),
+        inset 0 -2px 4px rgba(255,255,255,0.05),
+        0 1px 2px rgba(255,255,255,0.1);
+      border: 2px solid #2d1406;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    }
+
+    .slot-groove.drag-hover {
+      border-color: #34d399 !important;
+      box-shadow: 0 0 22px rgba(52, 211, 153, 0.9), inset 0 2px 8px rgba(52, 211, 153, 0.5) !important;
+      transform: scale(1.04) translateY(-3px);
+    }
+
+    .slot-groove.drag-invalid {
+      border-color: #f87171 !important;
+      box-shadow: 0 0 16px rgba(248, 113, 113, 0.7) !important;
+    }
+
+    .coin-layer {
+      position: relative;
+      height: 11px;
+      margin-top: -3px;
+      border-radius: 9999px;
+      box-shadow: 
+        0 3px 3px rgba(0,0,0,0.45),
+        inset 0 2px 2px rgba(255,255,255,0.6),
+        inset 0 -2px 3px rgba(0,0,0,0.5);
+      pointer-events: none;
+    }
+
+    .coin-layer::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      background: repeating-linear-gradient(
+        90deg,
+        rgba(0,0,0,0.2) 0px,
+        rgba(0,0,0,0.2) 2px,
+        rgba(255,255,255,0.25) 2px,
+        rgba(255,255,255,0.25) 4px
+      );
+      pointer-events: none;
+    }
+
+    .coin-face {
+      position: relative;
+      width: 44px;
+      height: 44px;
+      border-radius: 9999px;
+      margin-top: -6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 16px;
+      box-shadow: 
+        0 6px 10px rgba(0,0,0,0.5),
+        inset 0 2px 4px rgba(255,255,255,0.7),
+        inset 0 -4px 6px rgba(0,0,0,0.55);
+      border: 3px solid rgba(255,255,255,0.5);
+      z-index: 10;
+      cursor: grab;
+      transition: transform 0.1s ease;
+    }
+
+    .coin-face:hover {
+      transform: scale(1.08) translateY(-2px);
+      filter: brightness(1.15);
+    }
+
+    .coin-face:active {
+      cursor: grabbing;
+    }
+
+    .coin-face-inner {
+      width: 32px;
+      height: 32px;
+      border-radius: 9999px;
+      border: 2px dashed rgba(255,255,255,0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+      pointer-events: none;
+    }
+
+    #drag-proxy {
+      position: fixed;
+      pointer-events: none !important;
+      z-index: 99999;
+      transform: translate(-50%, -50%) scale(1.2);
+      filter: drop-shadow(0 15px 25px rgba(0,0,0,0.85));
+      display: none;
+    }
+
+    #drag-proxy * {
+      pointer-events: none !important;
+    }
+
+    .stack-ghosted {
+      opacity: 0.25;
+      filter: grayscale(0.5);
+    }
+
+    @keyframes mergePop {
+      0% { transform: scale(1); filter: brightness(1); }
+      40% { transform: scale(1.35) rotate(-6deg); filter: brightness(2) drop-shadow(0 0 24px #fbbf24); }
+      70% { transform: scale(0.9) rotate(4deg); }
+      100% { transform: scale(1) rotate(0deg); filter: brightness(1); }
+    }
+
+    .animate-merge-pop {
+      animation: mergePop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .tray-shelf {
+      background: linear-gradient(180deg, #3d1b09 0%, #220e04 100%);
+      border: 3px solid #5a270d;
+      box-shadow: inset 0 3px 6px rgba(0,0,0,0.8), 0 8px 16px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body class="text-white min-h-screen flex flex-col items-center justify-between p-2 select-none">
+
+  <div id="drag-proxy" class="flex flex-col-reverse items-center"></div>
+
+  <header class="w-full max-w-md flex items-center justify-between px-3 py-2 z-20">
+    <div class="flex items-center gap-3">
+      <div class="bg-black/40 backdrop-blur border border-amber-900/60 px-3 py-1.5 rounded-2xl flex flex-col items-center shadow-lg">
+        <span class="text-[10px] tracking-wider text-amber-200/80 font-bold uppercase" id="lbl-level">LEVEL 1</span>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          <div id="target-coin-chip" class="w-7 h-7 rounded-full border-2 border-white/80 flex items-center justify-center font-black text-xs shadow-md">
+            2
+          </div>
+          <div class="flex flex-col">
+            <span class="text-[9px] text-amber-300 font-semibold">GOAL</span>
+            <span id="target-count" class="text-xs font-black text-white leading-none">0/1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <div class="bg-black/40 border border-amber-900/50 px-2.5 py-1 rounded-xl flex items-center gap-1.5">
+        <span class="text-xs">🪙</span>
+        <span id="stat-coins" class="text-xs font-black text-amber-300">0</span>
+      </div>
+      <button id="btn-sound" class="w-8 h-8 rounded-xl bg-black/40 border border-amber-900/50 flex items-center justify-center text-sm hover:bg-black/60 transition cursor-pointer">
+        🔊
+      </button>
+      <button id="btn-restart" class="w-8 h-8 rounded-xl bg-black/40 border border-amber-900/50 flex items-center justify-center text-xs hover:bg-black/60 transition cursor-pointer" title="Restart">
+        🔄
+      </button>
+    </div>
+  </header>
+
+  <div class="w-full max-w-md px-3">
+    <div class="bg-black/50 border border-amber-700/40 rounded-xl px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-200 shadow-md">
+      <div class="flex items-center gap-1.5">
+        <span class="text-sm">🖱️</span>
+        <span><b>Drag any coin with mouse</b> & drop to another slot! <b>10x #1 (Black)</b> merge into <b>#2</b>!</span>
+      </div>
+      <span id="combo-pill" class="hidden px-2 py-0.5 rounded-full bg-yellow-400 text-slate-950 font-black text-[10px] animate-bounce">
+        COMBO x2!
+      </span>
+    </div>
+  </div>
+
+  <main class="w-full max-w-md my-auto px-2">
+    <div class="wooden-board rounded-3xl p-3 shadow-2xl relative">
+      <div class="grid grid-cols-5 gap-2.5" id="board-slots"></div>
+    </div>
+  </main>
+
+  <footer class="w-full max-w-md flex flex-col items-center gap-2 px-3 pb-3 z-20">
+    <div class="tray-shelf w-full rounded-2xl p-2.5 flex flex-col items-center gap-1.5">
+      <div class="flex items-center justify-between w-full px-1">
+        <span class="text-[10px] uppercase font-bold text-amber-300/80 tracking-wider flex items-center gap-1">
+          <span>📦</span> Coin Supply Tray (Drag to Board)
+        </span>
+        <button id="btn-refill" class="text-[10px] bg-amber-900/60 hover:bg-amber-800 text-amber-200 px-2 py-0.5 rounded-md border border-amber-700/50 font-bold transition cursor-pointer">
+          + Refill Tray
+        </button>
+      </div>
+      
+      <div class="flex items-center justify-center gap-3 w-full py-1 overflow-x-auto" id="supply-slots"></div>
+    </div>
+  </footer>
+
+  <div id="modal-victory" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-gradient-to-b from-amber-900 to-slate-950 border-2 border-yellow-400 p-6 rounded-3xl max-w-xs w-full text-center shadow-2xl flex flex-col items-center animate-merge-pop">
+      <div class="text-4xl mb-2">🎉🏆✨</div>
+      <h2 class="text-2xl font-black text-yellow-300 tracking-wide mb-1">LEVEL COMPLETED!</h2>
+      <p class="text-xs text-amber-200/80 mb-4">You forged the target coins by stacking 10 into 1!</p>
+      
+      <div class="bg-black/40 border border-amber-600/40 px-4 py-2 rounded-xl mb-5 flex items-center justify-between w-full text-xs">
+        <span class="text-slate-300">Total Merges:</span>
+        <span id="modal-merges" class="font-bold text-yellow-300">0</span>
+      </div>
+
+      <button id="btn-next-level" class="w-full py-3 rounded-2xl font-black text-lg text-white bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 border border-emerald-300 shadow-lg cursor-pointer transition">
+        NEXT LEVEL ➔
+      </button>
+    </div>
+  </div>
+
+  <script>
+    class SoundFX {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      }
+      clink(pitch = 1) {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        const freq = 1350 * pitch + Math.random() * 50;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.4, this.ctx.currentTime + 0.03);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.3, this.ctx.currentTime + 0.15);
+
+        gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.16);
+      }
+      merge(tier = 1) {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const base = 320 * Math.pow(1.15, tier);
+        [0, 4, 7, 12, 16].forEach((st, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(base * Math.pow(2, st / 12), t + i * 0.05);
+          gain.gain.setValueAtTime(0, t + i * 0.05);
+          gain.gain.linearRampToValueAtTime(0.25, t + i * 0.05 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.05 + 0.35);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t + i * 0.05);
+          osc.stop(t + i * 0.05 + 0.36);
+        });
+      }
+      victory() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        [0, 4, 7, 12, 16, 19, 24].forEach((st, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440 * Math.pow(2, st / 12), t + i * 0.06);
+          gain.gain.setValueAtTime(0.25, t + i * 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.45);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t + i * 0.06);
+          osc.stop(t + i * 0.06 + 0.5);
+        });
+      }
+    }
+
+    const sound = new SoundFX();
+
+    const COIN_CONFIG = {
+      1: { num: 1, name: "Black Onyx", bg: "background: radial-gradient(circle at 35% 35%, #2a2a2a 0%, #111111 50%, #000000 100%);", border: "border-zinc-400", textColor: "text-white font-black" },
+      2: { num: 2, name: "Silver Gray", bg: "background: radial-gradient(circle at 35% 35%, #e2e8f0 0%, #94a3b8 50%, #475569 100%);", border: "border-slate-100", textColor: "text-slate-900 font-black" },
+      3: { num: 3, name: "Golden Yellow", bg: "background: radial-gradient(circle at 35% 35%, #fde047 0%, #eab308 50%, #854d0e 100%);", border: "border-yellow-200", textColor: "text-amber-950 font-black" },
+      4: { num: 4, name: "Royal Blue", bg: "background: radial-gradient(circle at 35% 35%, #60a5fa 0%, #2563eb 50%, #1e3a8a 100%);", border: "border-blue-200", textColor: "text-white font-black" },
+      5: { num: 5, name: "Vibrant Green", bg: "background: radial-gradient(circle at 35% 35%, #4ade80 0%, #16a34a 50%, #14532d 100%);", border: "border-emerald-200", textColor: "text-slate-950 font-black" },
+      6: { num: 6, name: "Lavender Purple", bg: "background: radial-gradient(circle at 35% 35%, #c084fc 0%, #9333ea 50%, #581c87 100%);", border: "border-purple-200", textColor: "text-white font-black" },
+      7: { num: 7, name: "Hot Pink", bg: "background: radial-gradient(circle at 35% 35%, #f472b6 0%, #db2777 50%, #831843 100%);", border: "border-pink-200", textColor: "text-white font-black" },
+      8: { num: 8, name: "Warm Bronze", bg: "background: radial-gradient(circle at 35% 35%, #fb923c 0%, #c2410c 50%, #7c2d12 100%);", border: "border-orange-200", textColor: "text-white font-black" },
+      9: { num: 9, name: "Deep Indigo", bg: "background: radial-gradient(circle at 35% 35%, #818cf8 0%, #4f46e5 50%, #312e81 100%);", border: "border-indigo-200", textColor: "text-white font-black" },
+      10: { num: 10, name: "Bright Orange", bg: "background: radial-gradient(circle at 35% 35%, #f97316 0%, #ea580c 50%, #9a3412 100%);", border: "border-amber-200", textColor: "text-white font-black" },
+      11: { num: 11, name: "Mint Teal", bg: "background: radial-gradient(circle at 35% 35%, #2dd4bf 0%, #0d9488 50%, #134e4a 100%);", border: "border-teal-200", textColor: "text-slate-950 font-black" },
+      12: { num: 12, name: "Cyan Sky", bg: "background: radial-gradient(circle at 35% 35%, #38bdf8 0%, #0284c7 50%, #0c4a6e 100%);", border: "border-cyan-200", textColor: "text-slate-950 font-black" }
+    };
+
+    function getCoinStyle(num) {
+      return COIN_CONFIG[num] || {
+        num: num,
+        name: "Coin " + num,
+        bg: "background: radial-gradient(circle at 35% 35%, #f59e0b 0%, #b45309 50%, #78350f 100%);",
+        border: "border-yellow-200",
+        textColor: "text-white font-black"
+      };
+    }
+
+    const NUM_SLOTS = 10;
+    let currentLevel = 1;
+    let targetCoinNum = 2;
+    let targetNeeded = 1;
+    let targetAchieved = 0;
+    let totalScore = 0;
+    let totalMerges = 0;
+
+    let slots = [];
+    let supplyCoins = [1, 1, 1, 1, 2];
+
+    let isDragging = false;
+    let dragOriginType = null;
+    let dragSourceSlot = null;
+    let dragCoinNum = null;
+    let dragCoinsCount = 1;
+    let currentHoveredSlot = null;
+
+    const LEVELS = [
+      {
+        level: 1,
+        target: 2,
+        count: 1,
+        preset: [
+          [1, 1, 1, 1, 1],
+          [1, 1, 1, 1],
+          [],
+          [1, 1],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        supply: [1, 1, 1, 1, 1]
+      },
+      {
+        level: 2,
+        target: 3,
+        count: 1,
+        preset: [
+          [2, 2, 2, 2, 2],
+          [2, 2, 2, 2],
+          [1, 1, 1, 1, 1, 1],
+          [1, 1, 1, 1],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        supply: [1, 1, 2, 2, 1]
+      },
+      {
+        level: 3,
+        target: 4,
+        count: 1,
+        preset: [
+          [3, 3, 3, 3, 3],
+          [3, 3, 3, 3],
+          [2, 2, 2, 2, 2],
+          [2, 2, 2, 2, 2],
+          [1, 1, 1, 1, 1, 1, 1],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        supply: [2, 2, 3, 1, 2]
+      }
+    ];
+
+    function initLevel(lvlIndex = 1) {
+      currentLevel = lvlIndex;
+      const lvlData = LEVELS[lvlIndex - 1] || {
+        level: lvlIndex,
+        target: Math.min(lvlIndex + 1, 12),
+        count: 1,
+        preset: generateRandomBoard(lvlIndex),
+        supply: [1, 1, 1, 2, 1]
+      };
+
+      targetCoinNum = lvlData.target;
+      targetNeeded = lvlData.count;
+      targetAchieved = 0;
+      supplyCoins = [...lvlData.supply];
+
+      slots = [];
+      for (let i = 0; i < NUM_SLOTS; i++) {
+        slots.push(lvlData.preset[i] ? [...lvlData.preset[i]] : []);
+      }
+
+      document.getElementById('lbl-level').textContent = `LEVEL ${currentLevel}`;
+      updateTargetDisplay();
+      renderBoard();
+      renderSupply();
+    }
+
+    function generateRandomBoard(lvl) {
+      const b = [[], [], [], [], [], [], [], [], [], []];
+      const maxTier = Math.min(lvl, 5);
+      for (let i = 0; i < 6; i++) {
+        const tier = Math.floor(Math.random() * maxTier) + 1;
+        const count = Math.floor(Math.random() * 5) + 3;
+        for (let k = 0; k < count; k++) b[i].push(tier);
+      }
+      return b;
+    }
+
+    function updateTargetDisplay() {
+      const targetStyle = getCoinStyle(targetCoinNum);
+      const chip = document.getElementById('target-coin-chip');
+      chip.style = targetStyle.bg;
+      chip.className = `w-7 h-7 rounded-full border-2 ${targetStyle.border} ${targetStyle.textColor} flex items-center justify-center font-black text-xs shadow-md`;
+      chip.textContent = targetCoinNum;
+
+      document.getElementById('target-count').textContent = `${targetAchieved}/${targetNeeded}`;
+      document.getElementById('stat-coins').textContent = totalScore.toLocaleString();
+    }
+
+    function getBoardSlotAt(x, y) {
+      const slotEls = document.querySelectorAll('.slot-groove');
+      for (let i = 0; i < slotEls.length; i++) {
+        const rect = slotEls[i].getBoundingClientRect();
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          return parseInt(slotEls[i].getAttribute('data-slot'));
+        }
+      }
+      return null;
+    }
+
+    function canAcceptCoins(targetSlotIdx, coinNum) {
+      if (dragOriginType === 'board' && targetSlotIdx === dragSourceSlot) return false;
+      const targetCoins = slots[targetSlotIdx];
+      if (targetCoins.length >= 10) return false;
+      if (targetCoins.length === 0) return true;
+      return targetCoins[targetCoins.length - 1] === coinNum;
+    }
+
+    function renderBoard() {
+      const container = document.getElementById('board-slots');
+      container.innerHTML = '';
+
+      for (let i = 0; i < NUM_SLOTS; i++) {
+        const slotEl = document.createElement('div');
+        const isDragSource = isDragging && dragOriginType === 'board' && dragSourceSlot === i;
+        
+        slotEl.className = `slot-groove relative h-40 rounded-2xl flex flex-col-reverse items-center justify-start pb-2.5 pt-2 transition-all duration-150 select-none`;
+        slotEl.setAttribute('data-slot', i);
+
+        const coins = slots[i];
+        
+        if (coins.length > 0) {
+          const topCoinNum = coins[coins.length - 1];
+          const topCoinStyle = getCoinStyle(topCoinNum);
+
+          const stackEl = document.createElement('div');
+          stackEl.className = `flex flex-col-reverse items-center transition-opacity ${isDragSource ? 'stack-ghosted' : ''}`;
+
+          const face = document.createElement('div');
+          face.className = `coin-face ${topCoinStyle.textColor} ${topCoinStyle.border}`;
+          face.style = topCoinStyle.bg;
+          face.innerHTML = `<div class="coin-face-inner">${topCoinNum}</div>`;
+          
+          face.addEventListener('mousedown', (e) => startMouseDrag(e, 'board', i, topCoinNum));
+          face.addEventListener('touchstart', (e) => startTouchDrag(e, 'board', i, topCoinNum), { passive: false });
+
+          stackEl.appendChild(face);
+
+          const visibleLayers = Math.min(coins.length - 1, 9);
+          for (let l = 0; l < visibleLayers; l++) {
+            const coinIdx = coins.length - 2 - l;
+            const coinNum = coins[coinIdx];
+            const layerStyle = getCoinStyle(coinNum);
+
+            const layer = document.createElement('div');
+            layer.className = `coin-layer w-10`;
+            layer.style = layerStyle.bg;
+            stackEl.appendChild(layer);
+          }
+
+          const countBadge = document.createElement('div');
+          countBadge.className = "absolute top-1 text-[10px] font-black px-1.5 py-0.2 rounded-full bg-black/60 text-amber-200 border border-amber-900/60 pointer-events-none";
+          countBadge.textContent = `${coins.length}/10`;
+          slotEl.appendChild(countBadge);
+
+          slotEl.appendChild(stackEl);
+        } else {
+          const emptySign = document.createElement('div');
+          emptySign.className = "text-[10px] text-amber-800/60 font-bold uppercase tracking-wider mb-2 pointer-events-none";
+          emptySign.textContent = "EMPTY";
+          slotEl.appendChild(emptySign);
+        }
+
+        container.appendChild(slotEl);
+      }
+    }
+
+    function renderSupply() {
+      const supplyContainer = document.getElementById('supply-slots');
+      supplyContainer.innerHTML = '';
+
+      supplyCoins.forEach((coinNum, idx) => {
+        const style = getCoinStyle(coinNum);
+        const coinWrapper = document.createElement('div');
+        coinWrapper.className = "flex flex-col items-center cursor-grab select-none";
+
+        const face = document.createElement('div');
+        face.className = `coin-face ${style.textColor} ${style.border}`;
+        face.style = style.bg;
+        face.innerHTML = `<div class="coin-face-inner">${coinNum}</div>`;
+
+        face.addEventListener('mousedown', (e) => startMouseDrag(e, 'supply', idx, coinNum));
+        face.addEventListener('touchstart', (e) => startTouchDrag(e, 'supply', idx, coinNum), { passive: false });
+
+        coinWrapper.appendChild(face);
+        supplyContainer.appendChild(coinWrapper);
+      });
+    }
+
+    function startMouseDrag(e, originType, index, coinNum) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      initDrag(e.clientX, e.clientY, originType, index, coinNum);
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+
+    function startTouchDrag(e, originType, index, coinNum) {
+      if (e.touches.length > 1) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      initDrag(touch.clientX, touch.clientY, originType, index, coinNum);
+
+      window.addEventListener('touchmove', onTouchMove, { passive: false });
+      window.addEventListener('touchend', onTouchEnd);
+      window.addEventListener('touchcancel', onTouchEnd);
+    }
+
+    function initDrag(clientX, clientY, originType, index, coinNum) {
+      isDragging = true;
+      dragOriginType = originType;
+      dragSourceSlot = index;
+      dragCoinNum = coinNum;
+
+      if (originType === 'board') {
+        const slotCoins = slots[index];
+        let matching = 0;
+        for (let i = slotCoins.length - 1; i >= 0; i--) {
+          if (slotCoins[i] === coinNum) matching++;
+          else break;
+        }
+        dragCoinsCount = matching;
+      } else {
+        dragCoinsCount = 1;
+      }
+
+      sound.clink(1.3);
+
+      const proxy = document.getElementById('drag-proxy');
+      proxy.innerHTML = '';
+      const style = getCoinStyle(coinNum);
+
+      const face = document.createElement('div');
+      face.className = `coin-face ${style.textColor} ${style.border}`;
+      face.style = style.bg;
+      face.innerHTML = `<div class="coin-face-inner">${coinNum}</div>`;
+      proxy.appendChild(face);
+
+      const visibleLayers = Math.min(dragCoinsCount - 1, 7);
+      for (let l = 0; l < visibleLayers; l++) {
+        const layer = document.createElement('div');
+        layer.className = `coin-layer w-10`;
+        layer.style = style.bg;
+        proxy.appendChild(layer);
+      }
+
+      proxy.style.left = `${clientX}px`;
+      proxy.style.top = `${clientY}px`;
+      proxy.style.display = 'flex';
+
+      renderBoard();
+    }
+
+    function onMouseMove(e) {
+      updateDragPosition(e.clientX, e.clientY);
+    }
+
+    function onTouchMove(e) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      updateDragPosition(touch.clientX, touch.clientY);
+    }
+
+    function updateDragPosition(x, y) {
+      if (!isDragging) return;
+
+      const proxy = document.getElementById('drag-proxy');
+      proxy.style.left = `${x}px`;
+      proxy.style.top = `${y}px`;
+
+      document.querySelectorAll('.slot-groove').forEach(el => {
+        el.classList.remove('drag-hover', 'drag-invalid');
+      });
+
+      const slotIdx = getBoardSlotAt(x, y);
+      currentHoveredSlot = slotIdx;
+
+      if (slotIdx !== null) {
+        const targetEl = document.querySelector(`.slot-groove[data-slot="${slotIdx}"]`);
+        if (canAcceptCoins(slotIdx, dragCoinNum)) {
+          if (targetEl) targetEl.classList.add('drag-hover');
+        } else {
+          if (targetEl) targetEl.classList.add('drag-invalid');
+        }
+      }
+    }
+
+    async function onMouseUp(e) {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      await finishDrop(e.clientX, e.clientY);
+    }
+
+    async function onTouchEnd(e) {
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+      
+      const touch = e.changedTouches ? e.changedTouches[0] : null;
+      const x = touch ? touch.clientX : 0;
+      const y = touch ? touch.clientY : 0;
+      await finishDrop(x, y);
+    }
+
+    async function finishDrop(x, y) {
+      if (!isDragging) return;
+
+      const targetSlot = getBoardSlotAt(x, y);
+      const coinNum = dragCoinNum;
+      const originType = dragOriginType;
+      const sourceSlot = dragSourceSlot;
+
+      isDragging = false;
+      dragOriginType = null;
+      dragSourceSlot = null;
+      dragCoinNum = null;
+      currentHoveredSlot = null;
+
+      const proxy = document.getElementById('drag-proxy');
+      proxy.style.display = 'none';
+      proxy.innerHTML = '';
+
+      document.querySelectorAll('.slot-groove').forEach(el => {
+        el.classList.remove('drag-hover', 'drag-invalid');
+      });
+
+      if (targetSlot !== null && canAcceptCoins(targetSlot, coinNum)) {
+        const targetCoins = slots[targetSlot];
+
+        if (originType === 'board') {
+          const sourceCoins = slots[sourceSlot];
+          let matchingCount = 0;
+          for (let i = sourceCoins.length - 1; i >= 0; i--) {
+            if (sourceCoins[i] === coinNum) matchingCount++;
+            else break;
+          }
+
+          const space = 10 - targetCoins.length;
+          const toMove = Math.min(matchingCount, space);
+
+          for (let m = 0; m < toMove; m++) {
+            sourceCoins.pop();
+            targetCoins.push(coinNum);
+          }
+        } else if (originType === 'supply') {
+          supplyCoins.splice(sourceSlot, 1);
+          targetCoins.push(coinNum);
+
+          const r = Math.random();
+          let nextSupp = 1;
+          if (r < 0.25 && currentLevel >= 2) nextSupp = 2;
+          supplyCoins.push(nextSupp);
+          renderSupply();
+        }
+
+        sound.clink(1.2);
+        renderBoard();
+        await checkMerge(targetSlot);
+      } else {
+        renderBoard();
+      }
+    }
+
+    async function checkMerge(slotIdx) {
+      const coins = slots[slotIdx];
+      if (coins.length < 10) return;
+
+      const firstNum = coins[0];
+      const allIdentical = coins.every(c => c === firstNum);
+
+      if (allIdentical && coins.length === 10) {
+        totalMerges++;
+        const nextNum = firstNum + 1;
+
+        sound.merge(firstNum);
+
+        const slotEl = document.querySelector(`.slot-groove[data-slot="${slotIdx}"]`);
+        if (slotEl) {
+          slotEl.classList.add('animate-merge-pop');
+          const banner = document.createElement('div');
+          banner.className = "absolute inset-0 z-30 pointer-events-none flex flex-col items-center justify-center bg-black/70 rounded-2xl p-1 text-center animate-merge-pop";
+          banner.innerHTML = `
+            <div class="text-xs font-black text-yellow-300">✨ 10x [${firstNum}] ➔ 1x [${nextNum}]!</div>
+            <div class="text-[10px] text-amber-200">+${nextNum * 100} PTS</div>
+          `;
+          slotEl.appendChild(banner);
+          setTimeout(() => banner.remove(), 1200);
+        }
+
+        slots[slotIdx] = [nextNum];
+        totalScore += nextNum * 100;
+
+        if (nextNum === targetCoinNum) {
+          targetAchieved++;
+        }
+
+        updateTargetDisplay();
+        renderBoard();
+
+        if (targetAchieved >= targetNeeded) {
+          setTimeout(() => {
+            sound.victory();
+            document.getElementById('modal-merges').textContent = totalMerges;
+            document.getElementById('modal-victory').classList.remove('hidden');
+          }, 600);
+        }
+      }
+    }
+
+    document.getElementById('btn-refill').addEventListener('click', () => {
+      sound.clink(1.4);
+      supplyCoins = [1, 1, 1, 1, 2];
+      renderSupply();
+    });
+
+    document.getElementById('btn-restart').addEventListener('click', () => initLevel(currentLevel));
+
+    document.getElementById('btn-next-level').addEventListener('click', () => {
+      document.getElementById('modal-victory').classList.add('hidden');
+      initLevel(currentLevel + 1);
+    });
+
+    const soundBtn = document.getElementById('btn-sound');
+    soundBtn.addEventListener('click', () => {
+      sound.enabled = !sound.enabled;
+      soundBtn.textContent = sound.enabled ? '🔊' : '🔇';
+      soundBtn.classList.toggle('opacity-50', !sound.enabled);
+    });
+
+    initLevel(1);
+  </script>
+</body>
+</html>
