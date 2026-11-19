@@ -1,2 +1,2 @@
 # merge_coin
-good game 
+good game coin game
