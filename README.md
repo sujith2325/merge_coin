@@ -1,12 +1,8 @@
 🎮 Core Game Mechanics
 1. Board Layout (10 Chute Columns)
-
 The board is styled as a carved, polished mahogany tray with 10 vertical chute columns arranged in a 
-5
-×
-2
+5 × 2
 5×2 grid:
-
 Columns 1–5 (Upper Row): Unlocked and ready to receive coins from the start.
 Columns 6–10 (Lower Row): Locked initially with multiple progression pathways:
 Column 6: Unlocks free at Level 10 (or for 100 Credits).
@@ -14,17 +10,19 @@ Column 7: Unlocks free at Level 20 (or for 100 Credits).
 Column 8: Unlocks free at Level 30 (or for 100 Credits).
 Column 9 (Extra 60 Sec): Temporary 60-second boost slot for 50 Credits with a live countdown timer, or permanent unlock for 100 Credits.
 Column 10 (VIP Lock): Permanent unlock for 100 Credits.
-2. 3D Coin Stacking (Up to 10 Coins per Chute)
+
+3. 3D Coin Stacking (Up to 10 Coins per Chute)
 Each chute holds a stack of up to 10 cylindrical coins.
 The base of a stack or color group displays its circular embossed face with the tier numeral (1, 2, 3...).
 Coins stacked above display realistic 3D milled metallic rims with alternating serration teeth and specular highlights.
 A live occupancy badge at the top tracks height (0/10 to 10/10).
-3. Dual Controls: Drag-and-Drop + Click-to-Select + Pocket Sort 🟢 DEAL
+
+5. Dual Controls: Drag-and-Drop + Click-to-Select + Pocket Sort 🟢 DEAL
 
 Players can interact with coins using three flexible methods:
 
 🟢 DEAL Action Button (Pocket Sort Style):
-Click the prominent green 🟢 DEAL button in the supply shelf to instantly auto-deal the active supply coin into the best valid column on the board (matching group with room first, or the first empty column).
+Click the prominent green  DEAL button in the supply shelf to instantly auto-deal the active supply coin into the best valid column on the board (matching group with room first, or the first empty column).
 Click-to-Select / Click-to-Move ("Select One and Select One"):
 Click or tap any source column (or the active supply coin) to select it. The selected column elevates with a golden 3D lift and radiant pulsating halo (col-selected).
 Click any target column to transfer coins immediately.
@@ -32,35 +30,23 @@ Clicking the same column deselects it; clicking another column with coins switch
 Direct 3D Drag & Drop:
 Click and drag the top coin group with a 3D perspective shadow proxy and drop directly into another column.
 Placement Rules: A column accepts coins if it has available room (total coins 
-<
-10
+<10 
 <10) and either the column is empty or its top coin matches the incoming coin's tier (or is a Rainbow wildcard).
 Visual Validation: Columns highlight with a radiant green track for valid drops and red for full/invalid placements.
-4. Partial Transfer Algorithm
 
+4. Partial Transfer Algorithm
 Unlike simple sorting games that block moves when a column cannot fit an entire stack, this engine implements an exact Partial Fill Algorithm:
 availableSpace
-=
-capacity
-(
-10
-)
+=capacity(10)
 −
 targetCount
 availableSpace=capacity(10)−targetCount
 transferCount
 =
 min
-⁡
-(
-sourceCoins.length
-,
-availableSpace
-)
+(sourceCoins.length,availableSpace)
 transferCount=min(sourceCoins.length,availableSpace)
-remainingCount
-=
-sourceCoins.length
+remainingCount=sourceCoins.length
 −
 transferCount
 remainingCount=sourceCoins.length−transferCount
